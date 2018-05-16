@@ -2,6 +2,7 @@ name: Common test information
 description: Information common to tavern tests
 
 variables:
-  protocol: https
+  protocol: http
   host: 127.0.0.1
   port: 8080
+  APIversion: "v0.1"

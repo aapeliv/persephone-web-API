@@ -6,9 +6,9 @@ includes:
 stages:
   - name: Upload phonemes only text file
     request:
-      url: "{protocol:s}://{host:s}:{port:d}/transcription"
+      url: "{protocol:s}://{host:s}:{port:d}/{APIversion:s}/transcription"
       method: POST
       files:
-        test_files: "tests/sample_data/crdo-NRU_F4_ACCOMP_PFV.1.phonemes"
+        transcriptionFile: "tests/sample_data/crdo-NRU_F4_ACCOMP_PFV.1.phonemes"
     response:
       status_code: 201

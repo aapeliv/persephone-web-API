@@ -1,8 +1,8 @@
-from .extensions import db
-
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from sqlite3 import Connection as SQLite3Connection
+
+from .extensions import db
 
 @event.listens_for(Engine, "connect")
 def _set_sqlite_pragma(dbapi_connection, connection_record):
@@ -193,13 +193,56 @@ class TranscriptionModel(db.Model):
 
     early_stopping_steps = db.Column(db.Integer, nullable=False)
 
+    #Width of beam as used in beam search
     beam_width = db.Column(db.Integer, nullable=False)
+    # Flag to toggle merging of repeated phonemes in results stream
+    # for example "A B B B C" becomes "A B C" with this enabled
     decoding_merge_repeated = db.Column(db.Boolean, unique=False, default=True, nullable=False)
+
+    # Maximum Label Error Rate on validation data set
+    max_valid_LER = db.Column(db.Float)
+
+    # Maximum Label Error Rate on validation training set
+    max_train_LER = db.Column(db.Float)
 
     filesystem_path = db.Column(db.String, nullable=False)
 
     def __repr__(self):
         return ("<Model(name={}, corpus={}, min_epochs={}, max_epochs={}, "
+               "max_valid_LER={}, max_train_LER={}, "
                "early_stopping_steps={}, beam_width={}, decoding_merge_repeated={})>").format(
                     self.name, self.corpus, self.min_epochs, self.max_epochs,
+                    self.max_valid_LER, self.max_train_LER,
                     self.early_stopping_steps, self.beam_width, self.decoding_merge_repeated)
+
+
+class Label(db.Model):
+    """Represents a phonetic label"""
+    __tablename__ = 'label'
+
+    id = db.Column(db.Integer, primary_key=True)
+    label = db.Column(db.Unicode, nullable=False, unique=True)
+    def __repr__(self):
+        return "<Label({})>".format(self.label)
+
+
+class CorpusLabelSet(db.Model):
+    """Represents a set of phonetic labels found in a corpus.
+    This is used for keeping track of which labels a model was trained with"""
+    __tablename__ = 'labelset'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    corpus_id = db.Column(
+        db.Integer,
+        db.ForeignKey('corpus.id'),
+        nullable=False
+    )
+    corpus = db.relationship(DBcorpus)
+
+    label_id = db.Column(
+        db.Integer,
+        db.ForeignKey('label.id'),
+        nullable=False
+    )
+    label = db.relationship(Label)

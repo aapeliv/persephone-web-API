@@ -14,7 +14,7 @@ from persephone.corpus import Corpus
 import sqlalchemy
 
 from ..extensions import db
-from ..db_models import DBcorpus, TestingDataSet, TrainingDataSet, ValidationDataSet
+from ..db_models import DBcorpus, TestingDataSet, TrainingDataSet, ValidationDataSet, Label, CorpusLabelSet
 from ..serialization import CorpusSchema
 
 
@@ -70,6 +70,16 @@ def create_prefixes(audio_uploads_path: Path, transcription_uploads_path: Path, 
             pf.write(os.linesep)
     return prefixes
 
+def labels_set(corpus: DBcorpus) -> set:
+    """Retrieve the set of labels associated with a corpus.
+    
+    Given a corpus stored in the DB this will fetch the label set defined by that corpus."""
+    labels_query = db.session.query(CorpusLabelSet).filter_by(corpus_id=corpus.id)
+    labels = set()
+    for l in labels_query.all():
+        labels.add(l.label.label)
+    return labels
+
 def create_corpus_file_structure(audio_uploads_path: Path, transcription_uploads_path: Path,
                                  corpus: DBcorpus, corpus_path: Path) -> None:
     """Create the needed file structure on disk for a persephone.Corpus
@@ -103,11 +113,30 @@ def create_corpus_file_structure(audio_uploads_path: Path, transcription_uploads
     if validation_prefixes & testing_prefixes:
         raise ValueError("Overlapping prefixes detected with validation and testing: {}".format(validation_prefixes & testing_prefixes))
 
+def fix_corpus_format(corpus):
+    """Fix serialization issue from Schema in quick manner
+    TODO: Fix the serialization schema
+    """
+    import copy
+    fixed_format = copy.copy(corpus)
+    testing = corpus['testing']
+    training = corpus['training']
+    validation = corpus['validation']
+    del fixed_format['testing']
+    del fixed_format['training']
+    del fixed_format['validation']
+    fixed_format['partition'] = {
+        "testing": testing,
+        "training": training,
+        "validation": validation,
+    }
+    return fixed_format
+
 def search():
     """Handle request for all available DBcorpus"""
     results = []
     for row in db.session.query(DBcorpus):
-        serialized = CorpusSchema().dump(row).data
+        serialized = fix_corpus_format(CorpusSchema().dump(row).data)
         results.append(serialized)
     return results, 200
 
@@ -115,7 +144,7 @@ def search():
 def get(corpusID):
     """Get a DBcorpus by its ID"""
     existing_corpus = DBcorpus.query.get_or_404(corpusID)
-    result = CorpusSchema().dump(existing_corpus).data
+    result = fix_corpus_format(CorpusSchema().dump(existing_corpus).data)
     return result, 200
 
 
@@ -165,30 +194,43 @@ def post(corpusInfo):
     create_corpus_file_structure(audio_uploads_path, transcription_uploads_path, current_corpus, corpus_path)
     current_corpus.filesystem_path = str(corpus_uuid) # see if there's some other way of handling a UUID value directly into SQLAlchemy
     db.session.add(current_corpus)
+
+    # Creating the corpus object has the side-effect of creating a directory located at the path
+    # given to `tgt_dir`
     persephone_corpus = Corpus(
         feat_type=current_corpus.feature_type,
         label_type=current_corpus.label_type,
         tgt_dir=corpus_path,
     )
+    labels = persephone_corpus.labels
+    # Make any labels that don't currently exist in the Label table
+    for l in labels:
+        current_label = Label(label=l)
+        db.session.add(current_label)
+        # Make CorpusLabelSet entry
 
+        db.session.add(
+            CorpusLabelSet(
+                corpus=current_corpus,
+                label=current_label
+            )
+        )
     try:
         db.session.commit()
     except sqlalchemy.exc.IntegrityError:
         return "Invalid corpus provided", 400
     else:
-        result = CorpusSchema().dump(current_corpus).data
+        result = fix_corpus_format(CorpusSchema().dump(current_corpus).data)
         return result, 201
+
+def get_label_set(corpusID):
+    """Get the label set for a corpus with the given ID"""
+    existing_corpus = DBcorpus.query.get_or_404(corpusID)
+    corpus_data = fix_corpus_format(CorpusSchema().dump(existing_corpus).data)
+    labels = labels_set(existing_corpus)
+
+    return {"corpus": corpus_data, "labels": list(labels) }, 200
 
 def preprocess(corpusID):
     """Preprocess a corpus"""
     raise NotImplementedError
-
-def create_from_zip(zippedFile):
-    if zippedFile.mimetype != 'application/zip':
-        logger.info("Non zip mimetype from request, got {}".format(zippedFile.mimetype))
-        return "File type must be zip", 415
-    if not zipfile.is_zipfile(zippedFile):
-        logger.info("Zip file corrupted")
-        return "File type must be zip", 415
-    print("Create corpus from zip file")
-    return "Create corpus from zip not implemented", 501

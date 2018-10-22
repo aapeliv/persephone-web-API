@@ -94,6 +94,8 @@ paths:
             type: object
             required:
               - name
+              - label_type
+              - feature_type
               - training
               - validation
               - testing
@@ -102,6 +104,10 @@ paths:
                 type: string
                 description: "The name of this corpus"
                 example: "ExampleLang Corpus 3"
+              label_type:
+                $ref: "#/definitions/labelType"
+              feature_type:
+                $ref: "#/definitions/featureType"
               training:
                 $ref: "#/definitions/IDarray"
               validation:
@@ -132,45 +138,74 @@ paths:
             $ref: "#/definitions/corpusInformation"
         404:
           description: "Corpus not found"
-  /corpus/preprocess/{corpusID}:
-      post:
-        operationId: persephone_api.api_endpoints.corpus.preprocess
-        summary: "Preprocess a corpus for use with persephone"
-        produces:
-          - application/json
-        parameters:
-          - name: corpusID
-            in: path
-            description: "ID of corpus to preprocess"
-            required: true
-            type: integer
-            format: "int64"
-        responses:
-          200:
-            description: success
-            schema:
-              $ref: "#/definitions/corpusInformation"
-          404:
-            description: "Corpus not found"
-  /corpus/fromZip:
-    post:
-      summary: "Create a corpus from a Zip file"
-      operationId: persephone_api.api_endpoints.corpus.create_from_zip
-      consumes:
-        - multipart/form-data
+  /corpus/labels/{corpusID}:
+    get:
+      operationId: persephone_api.api_endpoints.corpus.get_label_set
+      summary: "Get the set of labels as defined by the corpus"
+      produces:
+        - application/json
       parameters:
-        - in: formData
-          name: zippedFile
-          type: file
+        - name: corpusID
+          in: path
+          description: "ID of corpus to return label set for"
           required: true
+          type: integer
+          format: "int64"
+      responses:
+        200:
+          description: success
+          schema:
+            $ref: "#/definitions/labelSetInformation"
+        404:
+          description: "Corpus not found"
+  /corpus/preprocess/{corpusID}:
+    post:
+      operationId: persephone_api.api_endpoints.corpus.preprocess
+      summary: "Preprocess a corpus for use with persephone"
+      produces:
+        - application/json
+      parameters:
+        - name: corpusID
+          in: path
+          description: "ID of corpus to preprocess"
+          required: true
+          type: integer
+          format: "int64"
       responses:
         200:
           description: success
           schema:
             $ref: "#/definitions/corpusInformation"
-        415:
-          description: "Bad filetype"
-
+        404:
+          description: "Corpus not found"
+  /label:
+    get:
+      summary: "Retrieve all phonetic labels that are currently available"
+      responses:
+        200:
+          description: success
+          schema:
+            type: array
+            items:
+              $ref: "#/definitions/label"
+    post:
+      summary: "Create a phonetic label that can be used in transcriptions"
+      consumes:
+        - application/json
+      parameters:
+        - name: labelInfo
+          in: body
+          schema:
+            type: object
+            required:
+              - phoneticLabel
+            properties:
+              phoneticLabel:
+                type: string
+                description: "The phonetic label"
+      responses:
+        201:
+          description: "label created"
   /model:
     get:
       summary: "Retrieve all models that are currently available"
@@ -197,6 +232,25 @@ paths:
             $ref: "#/definitions/modelInformation"
         400:
           description: "Invalid model specification"
+  /model/{modelID}:
+    get:
+      summary: "Get information about an uploaded model"
+      produces:
+        - application/json
+      parameters:
+        - name: modelID
+          in: path
+          description: "ID of model to return information about"
+          required: true
+          type: integer
+          format: "int64"
+      responses:
+        200:
+          description: success
+          schema:
+            $ref: "#/definitions/modelInformation"
+        404:
+          description: "Model not found"
   /model/train/{modelID}:
     post:
       operationId: persephone_api.api_endpoints.model.train
@@ -243,7 +297,6 @@ paths:
             $ref: "#/definitions/task"
         404:
           description: "Not found"
-
 
   /transcription:
     get:
@@ -398,13 +451,9 @@ definitions:
         description: "The name of this corpus"
         example: "ExampleLang Corpus"
       label_type:
-        type: "string"
-        description: "The type of labels"
-        example: "phonemes"
+        $ref: "#/definitions/labelType"
       feature_type:
-        type: "string"
-        description: "The type of the features"
-        example: "fbank"
+        $ref: "#/definitions/featureType"
       max_samples:
         type: "integer"
         format: "int64"
@@ -430,12 +479,39 @@ definitions:
             items:
               $ref: "#/definitions/utteranceInformation"
             description: "Utterances in testing set"
+  labelType:
+    type: "string"
+    description: "The type of the labels"
+    example: "phonemes"
+  featureType:
+    type: "string"
+    description: "The type of the features"
+    example: "fbank"
   IDarray:
     type: "array"
     items:
       type: "integer"
       format: "int64"
       minimum: 0
+  label:
+    type: "object"
+    properties:
+      id:
+        type: "integer"
+        format: "int64"
+      label:
+        type: "string"
+        description: "An atomic phonetic label as used in speech models"
+  labelSetInformation:
+    type: "object"
+    properties:
+      corpus:
+        $ref: "#/definitions/corpusInformation"
+      labels:
+        type: "array"
+        items:
+          $ref: "#/definitions/label"
+
   modelInformation:
     type: "object"
     required:
@@ -485,6 +561,14 @@ definitions:
         description: "Maximum number of training epochs"
         type: integer
         format: "int64"
+        minimum: 0
+      maxTrainingLER:
+        description: "Maximum Label Error Rate (LER) on training data"
+        type: number
+        minimum: 0
+      maxValidationLER:
+        description: "Maximum Label Error Rate (LER) on validation data"
+        type: number
         minimum: 0
   task:
     type: "object"

@@ -11,7 +11,7 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Enable Cross-Origin Resource Sharing headers
-    ENABLE_CORS = False
+    ENABLE_CORS = True
 
 
 class ProdConfig(Config):
@@ -40,3 +40,10 @@ class TestConfig(Config):
     TESTING = True
     DEBUG = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+
+    ENABLE_CORS = False
+
+
+class TestConfigCORS(TestConfig):
+    """Test configuration with CORS enabled."""
+    ENABLE_CORS = True

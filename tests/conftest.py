@@ -3,9 +3,10 @@ import pytest
 
 from persephone_api.app import create_app
 from persephone_api.extensions import db
-from persephone_api.settings import TestConfig
+from persephone_api.settings import TestConfig, TestConfigCORS
 
 app = create_app(TestConfig)
+app_cors = create_app(TestConfigCORS)
 
 # API version prefix
 API_VERSION = "v0.1"
@@ -13,13 +14,14 @@ API_VERSION = "v0.1"
 # create DB tables
 with app.app_context():
     db.create_all()
+with app_cors.app_context():
+    db.create_all()
 
 # configure upload paths
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024 #max 64 MB file upload
+app_cors.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024 #max 64 MB file upload
 
-
-@pytest.fixture
-def client(tmpdir):
+def create_client(tmpdir, app=app):
     """Create a test client to send requests to"""
     uploads_path = tmpdir.mkdir('test_uploads')
     app.config['BASE_UPLOAD_DIRECTORY'] = str(uploads_path)
@@ -29,9 +31,17 @@ def client(tmpdir):
     app.config['MODELS_PATH'] = str(models_path)
     from persephone_api.upload_config import configure_uploads
     configure_uploads(app, base_upload_path=str(uploads_path))
-    with app.test_client() as c:
+    return app.test_client()
+
+@pytest.fixture
+def client(tmpdir):
+    with create_client(tmpdir) as c:
         yield c
 
+@pytest.fixture
+def client_cors(tmpdir):
+    with create_client(tmpdir, app=app_cors) as c:
+        yield c
 
 @pytest.fixture
 def upload_audio(client):
